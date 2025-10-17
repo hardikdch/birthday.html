@@ -1,2 +1,0 @@
-# birthday.html
-birthday card
