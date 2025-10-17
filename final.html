@@ -1,0 +1,351 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+<title>Happy Birthday!</title>
+<style>
+  :root { --overlay-z: 1999; --pages-z: 1000; --confetti-z: 2000; }
+
+  html, body {
+    height: 100%;
+    margin: 0;
+    padding: 0;
+    font-family: "Poppins", system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+    background: #000;
+    -webkit-font-smoothing:antialiased;
+    -webkit-text-size-adjust:100%;
+    overflow: hidden;
+  }
+
+  /* Page container always fills available viewport area */
+  .page {
+    position: absolute;
+    inset: 0;               /* top:0; right:0; bottom:0; left:0; */
+    display: none;
+    justify-content: center;
+    align-items: center;
+    text-align: center;
+    color: white;
+    padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+    box-sizing: border-box;
+    min-height: 100svh;    /* use svh for mobile "small viewport" support */
+    flex-direction: column;
+    transition: opacity 0.45s ease, transform 0.45s ease;
+    opacity: 0;
+    transform: scale(0.98);
+    z-index: var(--pages-z);
+  }
+
+  .page.active {
+    display: flex;
+    opacity: 1;
+    transform: scale(1);
+  }
+
+  h1 { font-size: clamp(1.6rem, 4vw, 2.8rem); margin-bottom: 0.6rem; }
+  p  { font-size: clamp(1rem, 2.5vw, 1.2rem); margin-bottom: 1rem; }
+
+  button {
+    padding: 0.7rem 1.2rem;
+    border-radius: 10px;
+    border: none;
+    cursor: pointer;
+    font-weight: 600;
+    font-size: 1rem;
+    margin: 0.4rem;
+    transition: transform 0.18s ease;
+  }
+  button:active { transform: scale(.98); }
+  .btn-primary { background: #ff66b2; color: #fff; }
+  .btn-secondary { background: #333; color: #fff; }
+
+  /* Fullscreen confetti canvas */
+  #confetti {
+    position: fixed;
+    top: 0; left: 0;
+    width: 100vw;
+    height: 100vh;
+    pointer-events: none;
+    z-index: var(--confetti-z);
+  }
+
+  /* transition overlay (slight fade), kept below confetti */
+  body::after {
+    content: "";
+    position: fixed;
+    inset: 0;
+    background: #000;
+    opacity: 0;
+    transition: opacity 0.45s ease;
+    z-index: calc(var(--confetti-z) - 1); /* just below confetti */
+    pointer-events: none;
+  }
+  body.transitioning::after { opacity: 0.35; }
+
+  #finalMessage {
+    display: none;
+    font-size: clamp(1rem, 3vw, 1.6rem);
+    margin-top: 1.2rem;
+  }
+
+  #replayBtn { display: none; margin-top: 1rem; }
+
+  @media (max-width: 600px){
+    button { font-size: .95rem; padding: .6rem 1rem; }
+  }
+</style>
+</head>
+<body>
+
+<!-- audio (royalty-free happy birthday instrumental) -->
+<audio id="bgMusic" preload="auto" loop
+  src="https://cdn.pixabay.com/download/audio/2023/03/06/audio_7b6c85d682.mp3?filename=happy-birthday-266882.mp3">
+</audio>
+
+<!-- confetti canvas (fixed, full viewport) -->
+<canvas id="confetti" aria-hidden="true"></canvas>
+
+<!-- pages (each page covers full viewport) -->
+<div id="page1" class="page active" style="background: linear-gradient(45deg,#ff9a9e,#fad0c4);">
+  <h1>For Madam Ji 🌸</h1>
+  <p>Ready for a little surprise?</p>
+  <div>
+    <button class="btn-primary" id="startBtn">Yes 💖</button>
+  </div>
+</div>
+
+<div id="page2" class="page" style="background: linear-gradient(45deg,#a18cd1,#fbc2eb);">
+  <h1>Do you love me? 😏</h1>
+  <div>
+    <button class="btn-primary" id="loveYes">Of course ❤️</button>
+    <button class="btn-secondary" id="loveNo">No 😡</button>
+  </div>
+</div>
+
+<div id="page3" class="page" style="background: linear-gradient(45deg,#f6d365,#fda085);">
+  <h1>Okay then 😍</h1>
+  <p>Let’s light up the day!</p>
+  <div><button class="btn-primary" id="goLight">Light it up 🔥</button></div>
+</div>
+
+<div id="page4" class="page" style="background: linear-gradient(45deg,#84fab0,#8fd3f4);">
+  <h1>Let’s Celebrate 🎉</h1>
+  <p>Ready to cut the cake?</p>
+  <div><button class="btn-primary" id="goParty">Yes! 🎂</button></div>
+</div>
+
+<div id="page5" class="page" style="background: linear-gradient(45deg,#ffecd2,#fcb69f);">
+  <h1>Happy Birthday! 🎂</h1>
+  <p>Wishing you joy, laughter and love.</p>
+  <div id="finalMessage">You make my world brighter every day ❤️</div>
+  <button id="replayBtn" class="btn-primary">Replay 🎉</button>
+</div>
+
+<script>
+/* -------------------------
+   Utility & viewport sizing
+   ------------------------- */
+const canvas = document.getElementById('confetti');
+const ctx = canvas.getContext('2d');
+
+function setCanvasSize() {
+  // Prefer visualViewport if available for mobile address-bar dynamics
+  const vv = window.visualViewport;
+  if (vv) {
+    canvas.width = Math.max(document.documentElement.clientWidth, vv.width);
+    canvas.height = Math.max(document.documentElement.clientHeight, vv.height);
+    // position canvas to align with visualViewport offset
+    canvas.style.transform = `translate(${ - (vv.offsetLeft || 0)}px, ${ - (vv.offsetTop || 0)}px)`;
+  } else {
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+    canvas.style.transform = '';
+  }
+  // keep CSS full-viewport sizing too (fallback)
+  canvas.style.width = '100vw';
+  canvas.style.height = '100vh';
+}
+
+window.addEventListener('resize', setCanvasSize);
+window.addEventListener('orientationchange', () => {
+  // small timeout to allow browser to settle on mobile
+  setTimeout(setCanvasSize, 120);
+});
+if (window.visualViewport) {
+  visualViewport.addEventListener('resize', setCanvasSize);
+  visualViewport.addEventListener('scroll', setCanvasSize);
+}
+setCanvasSize();
+
+/* -------------------------
+   Page navigation & controls
+   ------------------------- */
+let currentPage = 1;
+function showPage(n) {
+  document.body.classList.add('transitioning');
+  setTimeout(() => {
+    document.querySelectorAll('.page').forEach((el, idx) => {
+      const pageNum = idx + 1;
+      if (pageNum === n) el.classList.add('active');
+      else el.classList.remove('active');
+    });
+    currentPage = n;
+    document.body.classList.remove('transitioning');
+    if (n === 5) startCelebration();
+  }, 360);
+}
+
+/* Buttons */
+const startBtn = document.getElementById('startBtn');
+const loveYes = document.getElementById('loveYes');
+const loveNo  = document.getElementById('loveNo');
+const goLight = document.getElementById('goLight');
+const goParty = document.getElementById('goParty');
+const replayBtn = document.getElementById('replayBtn');
+
+startBtn.addEventListener('click', () => {
+  // unlock sound on first user interaction (mobile)
+  unlockAudioOnInteraction();
+  showPage(2);
+});
+loveYes.addEventListener('click', () => showPage(3));
+loveNo.addEventListener('click', () => {
+  alert("Just kidding — you can't escape my love! 😘");
+  showPage(1);
+});
+goLight.addEventListener('click', () => showPage(4));
+goParty.addEventListener('click', () => showPage(5));
+replayBtn.addEventListener('click', () => {
+  resetCelebration();
+});
+
+/* -------------------------
+   Audio unlock + control
+   ------------------------- */
+const bg = document.getElementById('bgMusic');
+let audioUnlocked = false;
+
+function unlockAudioOnInteraction() {
+  if (audioUnlocked) return;
+  const attemptPlay = () => {
+    bg.play().then(() => {
+      audioUnlocked = true;
+    }).catch(()=> {
+      // still blocked; ignore silently
+    });
+  };
+  // Play once (many mobile devices require user gesture)
+  attemptPlay();
+  // remove listeners once attempted
+  window.removeEventListener('touchstart', unlockAudioOnInteraction);
+  window.removeEventListener('click', unlockAudioOnInteraction);
+}
+window.addEventListener('touchstart', unlockAudioOnInteraction, { once: true });
+window.addEventListener('click', unlockAudioOnInteraction, { once: true });
+
+/* -------------------------
+   Confetti engine (full-window)
+   ------------------------- */
+let pieces = [];
+let animating = false;
+
+function rand(min, max) { return Math.random() * (max - min) + min; }
+
+function createConfetti(count = 300) {
+  pieces = [];
+  const w = canvas.width, h = canvas.height;
+  for (let i = 0; i < count; i++) {
+    pieces.push({
+      x: rand(0, w),
+      y: rand(-h, 0),
+      size: rand(4, 10),
+      color: `hsl(${rand(0,360)}, 90%, ${rand(50,70)}%)`,
+      speedY: rand(2, 6),
+      tilt: rand(-0.3, 0.3),
+      rotation: rand(0, Math.PI*2),
+      rotateSpeed: rand(-0.08, 0.08)
+    });
+  }
+  if (!animating) { animating = true; animate(); }
+}
+
+function animate() {
+  if (!animating) return;
+  ctx.clearRect(0,0,canvas.width, canvas.height);
+  const w = canvas.width, h = canvas.height;
+  for (let p of pieces) {
+    ctx.save();
+    ctx.translate(p.x, p.y);
+    ctx.rotate(p.rotation);
+    // draw rectangle confetti centered
+    ctx.fillStyle = p.color;
+    ctx.fillRect(-p.size/2, -p.size/2, p.size, p.size*0.6);
+    ctx.restore();
+
+    p.y += p.speedY;
+    p.x += Math.sin(p.y * 0.01) * 0.7 + p.tilt;
+    p.rotation += p.rotateSpeed;
+
+    if (p.y - p.size > h) {
+      // recycle to top
+      p.y = rand(-h * 0.5, -10);
+      p.x = rand(0, w);
+    }
+  }
+  requestAnimationFrame(animate);
+}
+
+/* Stop confetti (if needed) */
+function stopConfetti() { animating = false; pieces = []; ctx.clearRect(0,0,canvas.width, canvas.height); }
+
+/* -------------------------
+   Celebration flow
+   ------------------------- */
+function startCelebration() {
+  // ensure audio has been unlocked
+  if (!audioUnlocked) {
+    // attempt to play now
+    unlockAudioOnInteraction();
+  }
+  // play background music (if unlocked)
+  bg.currentTime = 0;
+  bg.play().catch(()=>{ /* ignored if blocked */ });
+
+  // create confetti
+  createConfetti(320);
+
+  // show final message and replay with delays
+  setTimeout(() => {
+    document.getElementById('finalMessage').style.display = 'block';
+  }, 1800);
+  setTimeout(() => {
+    replayBtn.style.display = 'inline-block';
+  }, 3200);
+}
+
+function resetCelebration() {
+  document.getElementById('finalMessage').style.display = 'none';
+  replayBtn.style.display = 'none';
+  stopConfetti();
+  // small pause then re-create confetti
+  setTimeout(() => createConfetti(260), 120);
+}
+
+/* -------------------------
+   Init: ensure canvas sized + friendly first interaction
+   ------------------------- */
+setCanvasSize();
+document.addEventListener('DOMContentLoaded', () => {
+  // ensure we try to size once more after load (mobile)
+  setTimeout(setCanvasSize, 250);
+});
+
+// provide a fallback if visualViewport isn't available (some browsers)
+if (!window.visualViewport) {
+  window.addEventListener('resize', setCanvasSize);
+}
+</script>
+
+</body>
+</html>
